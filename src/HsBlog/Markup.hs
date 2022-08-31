@@ -1,0 +1,56 @@
+module HsBlog.Markup where
+
+import           Data.Maybe      (maybeToList)
+import           Numeric.Natural (Natural)
+
+type Document = [Structure]
+
+data Structure
+  = Heading Natural String
+  | Paragraph String
+  | UnorderedList [String]
+  | OrderedList [String]
+  | CodeBlock [String]
+  deriving (Eq, Show)
+
+parse :: String -> Document
+parse = parseLines Nothing . lines
+
+parseLines :: Maybe Structure -> [String] -> Document
+parseLines context txts = case txts of
+    -- done case, there is nothing left to parse
+  [] -> maybeToList context
+  -- Heading 1 case
+  ('*' : ' ' : line) : rest ->
+    maybe id (:) context (Heading 1 (trim line) : parseLines Nothing rest)
+
+  -- Unordered list case
+  ('-' : ' ' : line) : rest ->
+    case context of
+      Just (UnorderedList unorderedList) -> parseLines (Just (UnorderedList (unorderedList <> [trim line]))) rest
+      _ -> maybe id (:) context (parseLines (Just (UnorderedList [trim line])) rest)
+
+  -- Ordered list case
+  ('#' : ' ' : line) : rest ->
+    case context of
+      Just (OrderedList orderedList) -> parseLines (Just (OrderedList (orderedList <> [trim line]))) rest
+      _ -> maybe id (:) context (parseLines (Just (OrderedList [trim line])) rest)
+
+  -- Codeblock case
+  ('>' : ' ' : line) : rest ->
+    case context of
+      Just (CodeBlock codeBlock) -> parseLines (Just (CodeBlock (codeBlock <> [trim line]))) rest
+      _ -> maybe id (:) context (parseLines (Just (CodeBlock [trim line])) rest)
+
+  -- Paragraph case
+  currentLine : rest ->
+    let line = trim currentLine
+    in  if line == ""
+          then maybe id (:) context (parseLines Nothing rest)
+          else case context of
+            Just (Paragraph paragraph) ->
+              parseLines (Just (Paragraph (unwords [paragraph, line]))) rest
+            _ -> maybe id (:) context (parseLines (Just (Paragraph line)) rest)
+
+trim :: String -> String
+trim = unwords . words
